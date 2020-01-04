@@ -140,7 +140,11 @@ tokenize(istream& in)
  */
 
 class Expr
-{ };
+{ 
+public:
+	virtual string format() const = 0;
+	virtual int eval() const = 0;
+};
 
 class Prog
 { };
@@ -204,6 +208,10 @@ public:
 	Num(int v)
 		: val(v)
 	{}
+
+	string format() const { return to_string(val); }
+
+	int eval() const { return val; }
 };
 
 class Var : public Expr
@@ -224,6 +232,16 @@ public:
 		: left(move(left))
 		, right(move(right))
 	{}
+
+	int eval() const
+	{ 
+		return left->eval() + right->eval(); 
+	}
+
+	string format() const
+	{
+		return "(" + left->format() + " + " + right->format() + ")";
+	}
 };
 
 class Mult : public Expr
@@ -235,6 +253,16 @@ public:
 		: left(move(left))
 		, right(move(right))
 	{}
+
+	int eval() const 
+	{
+		return left->eval() * right->eval(); 
+	}
+
+	string format() const
+	{
+		return left->format() + " * " + right->format();
+	}
 };
 
 /*
