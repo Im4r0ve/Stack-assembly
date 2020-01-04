@@ -12,11 +12,12 @@ using namespace std;
 enum class token_type
 {
 	integer,
+	identifier,
 	plus,
+	minus,
 	times,
 	paren_open,
 	paren_close,
-	identifier,
 	input,
 	output,
 	assign,
@@ -44,6 +45,8 @@ struct Token
 			return to_string(value);
 		case token_type::plus:
 			return "+";
+		case token_type::minus:
+			return "-";
 		case token_type::times:
 			return "*";
 		case token_type::paren_open:
@@ -61,7 +64,7 @@ struct Token
 		case token_type::assign:
 			return "=";
 		default:
-			return "<unknown_token>";
+			return "Fail";
 		}
 	}
 };
@@ -103,6 +106,9 @@ tokenize(istream& in)
 		switch (c) {
 		case '+':
 			res.emplace_back(token_type::plus);
+			break;
+		case '-':
+			res.emplace_back(token_type::minus);
 			break;
 		case '*':
 			res.emplace_back(token_type::times);
@@ -147,7 +153,10 @@ public:
 };
 
 class Prog
-{ };
+{ 
+	virtual void compute() const = 0;
+
+};
 
 /*
  * program implementations
@@ -161,6 +170,9 @@ public:
 		: left(move(left))
 		, right(move(right))
 	{}
+	void compute()
+	{	
+	}
 };
 
 class Out : public Prog
@@ -171,6 +183,10 @@ public:
 	Out(const string& name)
 		: name(name)
 	{}
+	void compute()
+	{
+		cout << "WRITE" << endl;
+	}
 };
 
 class In : public Prog
@@ -181,6 +197,10 @@ public:
 	In(const string& name)
 		: name(name)
 	{}
+	void compute()
+	{
+		cout << "READ" << endl;
+	}
 };
 
 class Assign : public Prog
@@ -217,10 +237,13 @@ public:
 class Var : public Expr
 {
 	string name;
-
 public:
 	Var(const string& v)
 		: name(v) {}
+
+	string format() const { return name; }
+
+	int eval() const { return 0; }
 };
 
 class Add : public Expr
@@ -244,6 +267,27 @@ public:
 	}
 };
 
+class Sub : public Expr
+{
+	unique_ptr<Expr> left, right;
+
+public:
+	Sub(unique_ptr<Expr>&& left, unique_ptr<Expr>&& right)
+		: left(move(left))
+		, right(move(right))
+	{}
+
+	int eval() const
+	{
+		return left->eval() + right->eval();
+	}
+
+	string format() const
+	{
+		return "(" + left->format() + " - " + right->format() + ")";
+	}
+};
+
 class Mult : public Expr
 {
 	unique_ptr<Expr> left, right;
@@ -261,7 +305,7 @@ public:
 
 	string format() const
 	{
-		return left->format() + " * " + right->format();
+		return "(" + left->format() + " * " + right->format() + ")";
 	}
 };
 
@@ -310,47 +354,61 @@ ParseSimpleExpr(Pos& begin, Pos end)
 }
 
 unique_ptr<Expr>
-ParseMulExpr(Pos& begin, Pos end)
+ParseBinOp(Pos& begin, Pos end, token_type operation)
 {
-	unique_ptr<Expr> l = ParseSimpleExpr(begin, end);
-	if (!l)
-		return l;
-	if (begin == end)
-		return l;
-	if (begin->type != token_type::times)
-		return l;
-	begin++;
-	unique_ptr<Expr> r = ParseMulExpr(begin, end);
-	if (!r) {
-		begin--;
-		return l;
+	unique_ptr<Expr> l;
+	switch (operation)
+	{
+	case token_type::plus:
+		l = ParseBinOp(begin, end, token_type::minus);
+		break;
+	case token_type::minus:
+		l = ParseBinOp(begin, end, token_type::times);
+		break;
+	case token_type::times:
+		l = ParseSimpleExpr(begin, end);
+		break;
 	}
-	return make_unique<Mult>(move(l), move(r));
-}
 
-unique_ptr<Expr>
-ParseAddExpr(Pos& begin, Pos end)
-{
-	unique_ptr<Expr> l = ParseMulExpr(begin, end);
 	if (!l)
 		return l;
 	if (begin == end)
 		return l;
-	if (begin->type != token_type::plus)
-		return l;
+	
+	if (begin->type != operation )
+	{
+		if (operation != token_type::times && begin->type != token_type::times)
+		{
+			(operation == token_type::plus) ? operation = token_type::minus : operation = token_type::plus;
+		}
+		else
+			return l;
+	}
 	begin++;
-	unique_ptr<Expr> r = ParseAddExpr(begin, end);
+	unique_ptr<Expr> r = ParseBinOp(begin, end, operation);
 	if (!r) {
 		begin--;
 		return l;
 	}
-	return make_unique<Add>(move(l), move(r));
+
+	switch (operation)
+	{
+	case token_type::plus:
+		return make_unique<Add>(move(l), move(r));
+		break;
+	case token_type::minus:
+		return make_unique<Sub>(move(l), move(r));
+		break;
+	case token_type::times:
+		return make_unique<Mult>(move(l), move(r));
+		break;
+	}
 }
 
 unique_ptr<Expr>
 ParseExpr(Pos& begin, Pos end)
 {
-	return ParseAddExpr(begin, end);
+	return ParseBinOp(begin, end, token_type::plus);
 }
 
 unique_ptr<Prog>
@@ -423,8 +481,11 @@ main()
 {
 	auto tokens = tokenize(cin);
 	auto b = tokens.begin();
-	auto e = ParseProg(b, tokens.end());
-
+	//auto e = ParseProg(b, tokens.end());
+	
+		auto e = ParseExpr(b, tokens.end());
+		cout << e->format() << endl;
+	
 	//TODO
 	return 0;
 }
