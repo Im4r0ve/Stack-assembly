@@ -150,11 +150,13 @@ class Expr
 public:
 	virtual string format() const = 0;
 	virtual int eval() const = 0;
+	virtual string toAssembly() const = 0;
 };
 
 class Prog
 { 
-	virtual void compute() const = 0;
+public: 
+	virtual string toAssembly() const = 0;
 
 };
 
@@ -170,8 +172,11 @@ public:
 		: left(move(left))
 		, right(move(right))
 	{}
-	void compute()
+	string toAssembly() const
 	{	
+		cout << left->toAssembly() << endl;
+		cout << right->toAssembly() << endl;
+		return "";
 	}
 };
 
@@ -183,9 +188,9 @@ public:
 	Out(const string& name)
 		: name(name)
 	{}
-	void compute()
+	string toAssembly() const
 	{
-		cout << "WRITE" << endl;
+		return "WRITE";
 	}
 };
 
@@ -197,9 +202,9 @@ public:
 	In(const string& name)
 		: name(name)
 	{}
-	void compute()
+	string toAssembly() const
 	{
-		cout << "READ" << endl;
+		return "READ";
 	}
 };
 
@@ -214,6 +219,11 @@ public:
 		: name(name)
 		, right(move(right))
 	{}
+	string toAssembly() const
+	{
+		cout << right->toAssembly() << endl;
+		return "STOREVAR " + name;
+	}
 };
 
 /*
@@ -231,6 +241,11 @@ public:
 
 	string format() const { return to_string(val); }
 
+	string toAssembly() const
+	{
+		return "INT " + to_string(val);
+	}
+
 	int eval() const { return val; }
 };
 
@@ -242,6 +257,11 @@ public:
 		: name(v) {}
 
 	string format() const { return name; }
+
+	string toAssembly() const
+	{
+		return "LOADVAR " + name;
+	}
 
 	int eval() const { return 0; }
 };
@@ -265,6 +285,13 @@ public:
 	{
 		return "(" + left->format() + " + " + right->format() + ")";
 	}
+
+	string toAssembly() const
+	{
+		cout << left->toAssembly() << endl;
+		cout << right->toAssembly() << endl;
+		return "ADD";
+	}
 };
 
 class Sub : public Expr
@@ -286,6 +313,13 @@ public:
 	{
 		return "(" + left->format() + " - " + right->format() + ")";
 	}
+
+	string toAssembly() const
+	{
+		cout << left->toAssembly() << endl;
+		cout << right->toAssembly() << endl;
+		return "SUB";
+	}
 };
 
 class Mult : public Expr
@@ -306,6 +340,13 @@ public:
 	string format() const
 	{
 		return "(" + left->format() + " * " + right->format() + ")";
+	}
+
+	string toAssembly() const
+	{
+		cout << left->toAssembly() << endl;
+		cout << right->toAssembly() << endl;
+		return "MULT";
 	}
 };
 
@@ -485,6 +526,7 @@ main()
 	
 		auto e = ParseExpr(b, tokens.end());
 		cout << e->format() << endl;
+		cout << e->toAssembly() << endl;
 	
 	//TODO
 	return 0;
