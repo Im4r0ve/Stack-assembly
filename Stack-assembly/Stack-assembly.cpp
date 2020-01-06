@@ -200,7 +200,8 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
-		return "WRITE";
+		counter += 2;
+		return "WRITE\nSTOREVAR " + name + "\n";
 	}
 };
 
@@ -214,7 +215,8 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
-		return "READ";
+		counter+=2;
+		return "READ\nSTOREVAR " + name + "\n";
 	}
 };
 
@@ -231,29 +233,59 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
-		cout << right->toAssembly() << endl;
-		return "STOREVAR " + name;
+		counter++;
+		return right->toAssembly(counter) + "STOREVAR " + name + "\n";
 	}
 };
 
 class T_condition : public Prog
 {
 	string name;
-	int jump;
 	unique_ptr<Prog> right;
 
 public:
-	T_condition(const string& name,const int jump, unique_ptr<Prog>&& right)
+	T_condition(const string& name, unique_ptr<Prog>&& right)
 		: name(name)
-		, jump(jump)
 		, right(move(right))
 	{}
 	string toAssembly(size_t& counter) const
 	{
-		cout << "LOADVAR" + name;
-		cout << "JMPF" + to_string(jump+1);
-		cout << right->toAssembly(); // no endl bc recursion will fill it
-		return "";
+		counter += 2;
+		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter - 1) + "\n" + right->toAssembly(counter);
+	}
+};
+
+class F_condition : public Prog
+{
+	string name;
+	unique_ptr<Prog> right;
+
+public:
+	F_condition(const string& name, unique_ptr<Prog>&& right)
+		: name(name)
+		, right(move(right))
+	{}
+	string toAssembly(size_t& counter) const
+	{
+		counter += 2;
+		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter - 1) + "\n" + right->toAssembly(counter);
+	}
+};
+
+class Cycle : public Prog
+{
+	string name;
+	unique_ptr<Prog> right;
+
+public:
+	Cycle(const string& name, unique_ptr<Prog>&& right)
+		: name(name)
+		, right(move(right))
+	{}
+	string toAssembly(size_t& counter) const
+	{
+		counter += 3;
+		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter-1) + "\n" + right->toAssembly(counter) + "JMP -" + to_string(counter) + "\n";
 	}
 };
 
@@ -274,7 +306,8 @@ public:
 
 	string toAssembly(size_t& counter) const
 	{
-		return "INT " + to_string(val);
+		counter++;
+		return "INT " + to_string(val) + "\n";
 	}
 
 	int eval() const { return val; }
@@ -291,7 +324,8 @@ public:
 
 	string toAssembly(size_t& counter) const
 	{
-		return "LOADVAR " + name;
+		counter++;
+		return "LOADVAR " + name + "\n";
 	}
 
 	int eval() const { return 0; }
@@ -319,9 +353,8 @@ public:
 
 	string toAssembly(size_t& counter) const
 	{
-		cout << left->toAssembly() << endl;
-		cout << right->toAssembly() << endl;
-		return "ADD";
+		counter++;
+		return left->toAssembly(counter) + right->toAssembly(counter) + "ADD\n";
 	}
 };
 
@@ -347,9 +380,8 @@ public:
 
 	string toAssembly(size_t& counter) const
 	{
-		cout << left->toAssembly() << endl;
-		cout << right->toAssembly() << endl;
-		return "SUB";
+		counter++;
+		return left->toAssembly(counter) + right->toAssembly(counter) + "SUB\n";
 	}
 };
 
@@ -375,7 +407,8 @@ public:
 
 	string toAssembly(size_t& counter) const
 	{
-		return left->toAssembly(counter) + right->toAssembly(counter) + "MULT";
+		counter++;
+		return left->toAssembly(counter) + right->toAssembly(counter) + "MULT\n";
 	}
 };
 
@@ -387,6 +420,8 @@ using Pos = vector<Token>::iterator;
 
 unique_ptr<Expr>
 ParseExpr(Pos& begin, Pos end);
+unique_ptr<Prog>
+ParseProg(Pos& begin, Pos end);
 
 unique_ptr<Expr>
 ParseSimpleExpr(Pos& begin, Pos end)
@@ -526,14 +561,14 @@ ParseSimpleProg(Pos& begin, Pos end)
 			return nullptr;
 		}
 		string n = (begin++)->name;
-		unique_ptr<Expr> e = ParseSimpleExpr(begin, end);
+		unique_ptr<Prog> e = ParseSimpleProg(begin, end);
 		
 		if (!e) {
 			begin -= 2;
 			return nullptr;
 		}
 
-		return make_unique<Assign>(n, move(e));
+		return make_unique<Cycle>(n, move(e));
 	}
 	if (begin->type == token_type::T_condition) {
 		begin++;
@@ -543,7 +578,7 @@ ParseSimpleProg(Pos& begin, Pos end)
 		}
 
 		string n = (begin++)->name;
-		unique_ptr<Prog> e = ParseProg(begin, end);
+		unique_ptr<Prog> e = ParseSimpleProg(begin, end);
 		
 		if (!e) {
 			begin -= 2;
@@ -559,15 +594,28 @@ ParseSimpleProg(Pos& begin, Pos end)
 			return nullptr;
 		}
 		string n = (begin++)->name;
-		unique_ptr<Expr> e = ParseSimpleExpr(begin, end);
+		unique_ptr<Prog> e = ParseSimpleProg(begin, end);
 		if (!e) {
 			begin -= 2;
 			return nullptr;
 		}
 
-		return make_unique<Assign>(n, move(e));
+		return make_unique<F_condition>(n, move(e));
 	}
+	/*if (begin->type == token_type::paren_open) {
+		Pos original_begin = begin;
+		begin++;
 
+		unique_ptr<Expr> e = ParseExpr(begin, end);
+		if (!e || begin == end ||
+			begin->type != token_type::paren_close) {
+			begin = original_begin;
+			return nullptr;
+		}
+
+		begin++;
+		return e;
+	}*/
 	return nullptr;
 }
 
@@ -608,7 +656,8 @@ int main()
 		return 0;
 	}
 	//cout << e->format() << endl;
-	cout << e->toAssembly() << endl;
+	size_t counter = 0;
+	cout << e->toAssembly(counter);
 	cout << "QUIT" << endl;
 	return 0;
 }
