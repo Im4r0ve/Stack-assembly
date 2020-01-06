@@ -11,8 +11,8 @@ using namespace std;
 
 enum class token_type
 {
-	integer,
 	identifier,
+	integer,	
 	plus,
 	minus,
 	times,
@@ -23,9 +23,9 @@ enum class token_type
 	input,
 	output,
 	assign,
-	cycle,
 	T_condition,
 	F_condition,
+	cycle,
 	semicolon
 };
 
@@ -43,39 +43,6 @@ struct Token
 		, value(0)
 		, name(name)
 	{}
-	string format()
-	{
-		switch (type) {
-		case token_type::integer:
-			return to_string(value);
-		case token_type::plus:
-			return "+";
-		case token_type::minus:
-			return "-";
-		case token_type::times:
-			return "*";
-		case token_type::paren_open:
-			return "(";
-		case token_type::paren_close:
-			return ")";
-		case token_type::curly_open:
-			return "{";
-		case token_type::curly_close:
-			return "}";
-		case token_type::identifier:
-			return name;
-		case token_type::input:
-			return ">";
-		case token_type::output:
-			return "<";
-		case token_type::semicolon:
-			return ";";
-		case token_type::assign:
-			return "=";
-		default:
-			return "FAIL";
-		}
-	}
 };
 
 vector<Token>
@@ -134,14 +101,14 @@ tokenize(istream& in)
 		case '}':
 			res.emplace_back(token_type::curly_close);
 			break;
-		case '<':
-			res.emplace_back(token_type::output);
-			break;
 		case '>':
 			res.emplace_back(token_type::input);
 			break;
-		case '@':
-			res.emplace_back(token_type::cycle);
+		case '<':
+			res.emplace_back(token_type::output);
+			break;
+		case '=':
+			res.emplace_back(token_type::assign);
 			break;
 		case '?':
 			res.emplace_back(token_type::T_condition);
@@ -149,15 +116,15 @@ tokenize(istream& in)
 		case '!':
 			res.emplace_back(token_type::F_condition);
 			break;
+		case '@':
+			res.emplace_back(token_type::cycle);
+			break; 
 		case ';':
 			res.emplace_back(token_type::semicolon);
 			break;
-		case '=':
-			res.emplace_back(token_type::assign);
-			break;
-		//default:
-			//cerr << "Unexpected character: '" << c << "' " << int(c)
-			//	<< endl;
+		default:
+			cerr << "Unexpected character: '" << c << "' " << int(c)
+				<< endl;
 		}
 		in.get();
 	}
@@ -172,8 +139,6 @@ tokenize(istream& in)
 class Expr
 { 
 public:
-	virtual string format() const = 0;
-	virtual int eval() const = 0;
 	virtual string toAssembly(size_t& counter) const = 0;
 };
 
@@ -181,12 +146,12 @@ class Prog
 { 
 public: 
 	virtual string toAssembly(size_t& counter) const = 0;
-
 };
 
 /*
  * program implementations
  */
+
 class Seq : public Prog
 {
 	unique_ptr<Prog> left, right;
@@ -199,6 +164,22 @@ public:
 	string toAssembly(size_t& counter) const
 	{	
 		return left->toAssembly(counter) + right->toAssembly(counter);
+	}
+};
+
+class In : public Prog
+{
+	string name;
+
+public:
+	In(const string& name)
+		: name(name)
+	{}
+	string toAssembly(size_t& counter) const
+	{
+		counter += 2;
+		return	"READ\n"
+			"STOREVAR " + name + "\n";
 	}
 };
 
@@ -218,21 +199,6 @@ public:
 	}
 };
 
-class In : public Prog
-{
-	string name;
-
-public:
-	In(const string& name)
-		: name(name)
-	{}
-	string toAssembly(size_t& counter) const
-	{
-		counter+=2;
-		return "READ\nSTOREVAR " + name + "\n";
-	}
-};
-
 class Assign : public Prog
 {
 
@@ -247,7 +213,8 @@ public:
 	string toAssembly(size_t& counter) const
 	{
 		counter++;
-		return right->toAssembly(counter) + "STOREVAR " + name + "\n";
+		return	right->toAssembly(counter) + 
+				"STOREVAR " + name + "\n";
 	}
 };
 
@@ -327,15 +294,11 @@ public:
 		: val(v)
 	{}
 
-	string format() const { return to_string(val); }
-
 	string toAssembly(size_t& counter) const
 	{
 		counter++;
 		return "INT " + to_string(val) + "\n";
 	}
-
-	int eval() const { return val; }
 };
 
 class Var : public Expr
@@ -345,95 +308,31 @@ public:
 	Var(const string& v)
 		: name(v) {}
 
-	string format() const { return name; }
-
 	string toAssembly(size_t& counter) const
 	{
 		counter++;
 		return "LOADVAR " + name + "\n";
 	}
-
-	int eval() const { return 0; }
 };
 
-class Add : public Expr
+//class for operations: add, subtract and multiply
+class BinOp : public Expr
 {
+	token_type op;
 	unique_ptr<Expr> left, right;
 
 public:
-	Add(unique_ptr<Expr>&& left, unique_ptr<Expr>&& right)
+	BinOp(unique_ptr<Expr>&& left, unique_ptr<Expr>&& right, token_type op)
 		: left(move(left))
 		, right(move(right))
+		, op(op)
 	{}
-
-	int eval() const
-	{ 
-		return left->eval() + right->eval(); 
-	}
-
-	string format() const
-	{
-		return "(" + left->format() + " + " + right->format() + ")";
-	}
 
 	string toAssembly(size_t& counter) const
 	{
 		counter++;
-		return left->toAssembly(counter) + right->toAssembly(counter) + "ADD\n";
-	}
-};
-
-class Sub : public Expr
-{
-	unique_ptr<Expr> left, right;
-
-public:
-	Sub(unique_ptr<Expr>&& left, unique_ptr<Expr>&& right)
-		: left(move(left))
-		, right(move(right))
-	{}
-
-	int eval() const
-	{
-		return left->eval() + right->eval();
-	}
-
-	string format() const
-	{
-		return "(" + left->format() + " - " + right->format() + ")";
-	}
-
-	string toAssembly(size_t& counter) const
-	{
-		counter++;
-		return left->toAssembly(counter) + right->toAssembly(counter) + "SUB\n";
-	}
-};
-
-class Mult : public Expr
-{
-	unique_ptr<Expr> left, right;
-
-public:
-	Mult(unique_ptr<Expr>&& left, unique_ptr<Expr>&& right)
-		: left(move(left))
-		, right(move(right))
-	{}
-
-	int eval() const 
-	{
-		return left->eval() * right->eval(); 
-	}
-
-	string format() const
-	{
-		return "(" + left->format() + " * " + right->format() + ")";
-	}
-
-	string toAssembly(size_t& counter) const
-	{
-		counter++;
-		return left->toAssembly(counter) + right->toAssembly(counter) + "MULT\n";
+		string operation = (op == token_type::plus) ? "ADD" : ((op == token_type::minus) ? "SUB" : "MULT");
+		return left->toAssembly(counter) + right->toAssembly(counter) + operation + "\n";
 	}
 };
 
@@ -479,7 +378,6 @@ ParseSimpleExpr(Pos& begin, Pos end)
 		begin++;
 		return e;
 	}
-
 	return nullptr;
 }
 
@@ -507,13 +405,16 @@ ParseBinOp(Pos& begin, Pos end, token_type operation)
 	
 	if (begin->type != operation )
 	{
-		if (operation != token_type::times && begin->type != token_type::times)
+		//if you need to change between + and -
+		if (operation != token_type::times && 
+			begin->type != token_type::times)
 		{
-			(operation == token_type::plus) ? operation = token_type::minus : operation = token_type::plus;
+			operation = (operation == token_type::plus) ? token_type::minus : token_type::plus;
 		}
 		else
 			return l;
 	}
+
 	begin++;
 	unique_ptr<Expr> r = ParseBinOp(begin, end, operation);
 	if (!r) {
@@ -521,18 +422,7 @@ ParseBinOp(Pos& begin, Pos end, token_type operation)
 		return l;
 	}
 
-	switch (operation)
-	{
-	case token_type::plus:
-		return make_unique<Add>(move(l), move(r));
-		break;
-	case token_type::minus:
-		return make_unique<Sub>(move(l), move(r));
-		break;
-	case token_type::times:
-		return make_unique<Mult>(move(l), move(r));
-		break;
-	}
+	return make_unique<BinOp>(move(l), move(r), operation);	
 }
 
 unique_ptr<Expr>
@@ -546,16 +436,11 @@ ParseSimpleProg(Pos& begin, Pos end)
 {
 	if (begin == end)
 		return nullptr;
-	if (begin->type == token_type::output) {
-		begin++;
-		if (begin == end || begin->type != token_type::identifier) {
-			begin--;
-			return nullptr;
-		}
 
-		return make_unique<Out>((begin++)->name);
-	}
-	if (begin->type == token_type::input) {
+	switch (begin->type)
+	{
+	case token_type::input:
+	{
 		begin++;
 		if (begin == end || begin->type != token_type::identifier) {
 			begin--;
@@ -564,7 +449,18 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<In>((begin++)->name);
 	}
-	if (begin->type == token_type::assign) {
+	case  token_type::output:
+	{
+		begin++;
+		if (begin == end || begin->type != token_type::identifier) {
+			begin--;
+			return nullptr;
+		}
+
+		return make_unique<Out>((begin++)->name);
+	}
+	case  token_type::assign:
+	{
 		begin++;
 		if (begin == end || begin->type != token_type::identifier) {
 			begin--;
@@ -579,7 +475,8 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<Assign>(n, move(e));
 	}
-	if (begin->type == token_type::cycle) {
+	case  token_type::cycle:
+	{
 		begin++;
 		if (begin == end || begin->type != token_type::identifier) {
 			begin--;
@@ -587,7 +484,7 @@ ParseSimpleProg(Pos& begin, Pos end)
 		}
 		string n = (begin++)->name;
 		unique_ptr<Prog> e = ParseSimpleProg(begin, end);
-		
+
 		if (!e) {
 			begin -= 2;
 			return nullptr;
@@ -595,7 +492,8 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<Cycle>(n, move(e));
 	}
-	if (begin->type == token_type::T_condition) {
+	case  token_type::T_condition:
+	{
 		begin++;
 		if (begin == end || begin->type != token_type::identifier) {
 			begin--;
@@ -604,7 +502,7 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		string n = (begin++)->name;
 		unique_ptr<Prog> e = ParseSimpleProg(begin, end);
-		
+
 		if (!e) {
 			begin -= 2;
 			return nullptr;
@@ -612,7 +510,8 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<T_condition>(n, move(e));
 	}
-	if (begin->type == token_type::F_condition) {
+	case  token_type::F_condition:
+	{
 		begin++;
 		if (begin == end || begin->type != token_type::identifier) {
 			begin--;
@@ -627,7 +526,8 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<F_condition>(n, move(e));
 	}
-	if (begin->type == token_type::curly_open) {
+	case  token_type::curly_open:
+	{
 		Pos original_begin = begin;
 		begin++;
 
@@ -640,6 +540,7 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		begin++;
 		return e;
+	}
 	}
 	return nullptr;
 }
@@ -667,22 +568,23 @@ ParseProg(Pos& begin, Pos end)
  * the main program
  */
 
-
 int main()
 {
 	auto tokens = tokenize(cin);
 	auto b = tokens.begin();
-	//auto e = ParseProg(b, tokens.end());
-
 	auto e = ParseProg(b, tokens.end());
+
+	//if there is mistake in code only write FAIL
 	if (!e || b != tokens.end())
 	{
 		cout << "FAIL";
 		return 0;
 	}
-	//cout << e->format() << endl;
+
+	//print assembly
 	size_t counter = 0;
 	cout << e->toAssembly(counter);
 	cout << "QUIT" << endl;
+
 	return 0;
 }
