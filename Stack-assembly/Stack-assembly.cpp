@@ -18,6 +18,8 @@ enum class token_type
 	times,
 	paren_open,
 	paren_close,
+	curly_open,
+	curly_close,
 	input,
 	output,
 	assign,
@@ -56,6 +58,10 @@ struct Token
 			return "(";
 		case token_type::paren_close:
 			return ")";
+		case token_type::curly_open:
+			return "{";
+		case token_type::curly_close:
+			return "}";
 		case token_type::identifier:
 			return name;
 		case token_type::input:
@@ -67,7 +73,7 @@ struct Token
 		case token_type::assign:
 			return "=";
 		default:
-			return "Fail";
+			return "FAIL";
 		}
 	}
 };
@@ -122,6 +128,12 @@ tokenize(istream& in)
 		case ')':
 			res.emplace_back(token_type::paren_close);
 			break;
+		case '{':
+			res.emplace_back(token_type::curly_open);
+			break;
+		case '}':
+			res.emplace_back(token_type::curly_close);
+			break;
 		case '<':
 			res.emplace_back(token_type::output);
 			break;
@@ -143,9 +155,9 @@ tokenize(istream& in)
 		case '=':
 			res.emplace_back(token_type::assign);
 			break;
-		default:
-			cerr << "Unexpected character: '" << c << "' " << int(c)
-				<< endl;
+		//default:
+			//cerr << "Unexpected character: '" << c << "' " << int(c)
+			//	<< endl;
 		}
 		in.get();
 	}
@@ -201,7 +213,8 @@ public:
 	string toAssembly(size_t& counter) const
 	{
 		counter += 2;
-		return "WRITE\nSTOREVAR " + name + "\n";
+		return	"LOADVAR " + name +
+				"\nWRITE\n";
 	}
 };
 
@@ -250,8 +263,11 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
+		size_t orig_counter = counter;
 		counter += 2;
-		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter - 1) + "\n" + right->toAssembly(counter);
+		return	"LOADVAR " + name + "\n" + 
+				"JMPF " + to_string(counter - orig_counter-1) + "\n" +
+				right->toAssembly(counter);
 	}
 };
 
@@ -267,8 +283,11 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
+		size_t orig_counter = counter;
 		counter += 2;
-		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter - 1) + "\n" + right->toAssembly(counter);
+		return	"LOADVAR " + name + "\n" + 
+				"JMPT " + to_string(counter - orig_counter-1) + "\n" +
+				right->toAssembly(counter);
 	}
 };
 
@@ -284,8 +303,14 @@ public:
 	{}
 	string toAssembly(size_t& counter) const
 	{
-		counter += 3;
-		return "LOADVAR " + name + "\n" + "JMPF " + to_string(counter-1) + "\n" + right->toAssembly(counter) + "JMP -" + to_string(counter) + "\n";
+		size_t orig_counter = counter;
+		counter += 2;
+		string recurse = right->toAssembly(counter);
+		counter++;
+		return	"LOADVAR " + name + "\n"+ 
+				"JMPF " + to_string(counter - orig_counter - 1) + "\n" +
+				recurse + 
+				"JMP -" + to_string(counter - orig_counter - 1) + "\n";
 	}
 };
 
@@ -602,20 +627,20 @@ ParseSimpleProg(Pos& begin, Pos end)
 
 		return make_unique<F_condition>(n, move(e));
 	}
-	/*if (begin->type == token_type::paren_open) {
+	if (begin->type == token_type::curly_open) {
 		Pos original_begin = begin;
 		begin++;
 
-		unique_ptr<Expr> e = ParseExpr(begin, end);
+		unique_ptr<Prog> e = ParseProg(begin, end);
 		if (!e || begin == end ||
-			begin->type != token_type::paren_close) {
+			begin->type != token_type::curly_close) {
 			begin = original_begin;
 			return nullptr;
 		}
 
 		begin++;
 		return e;
-	}*/
+	}
 	return nullptr;
 }
 
@@ -650,9 +675,9 @@ int main()
 	//auto e = ParseProg(b, tokens.end());
 
 	auto e = ParseProg(b, tokens.end());
-	if (!e)
+	if (!e || b != tokens.end())
 	{
-		cout << "FAIL" << endl;
+		cout << "FAIL";
 		return 0;
 	}
 	//cout << e->format() << endl;
