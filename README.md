@@ -1,7 +1,7 @@
-Assignment overview
+# Assignment overview
 Read a program in a simple human-oriented programming language from the standard input, and output an equivalent code that can be processed by a stack-based machine.
 
-Input program
+## Input program
 The input program contains two main constructions: Expressions and Programs.
 
 Expressions are simple arithmetic expression with parentheses, numbers, variables, and binary operators. Variables are any group of lowercase letters (i.e. written as [a-z]+ in regex); all numbers are non-negative integers, and the only allowed binary operators are '+', '-' and '*'.
@@ -27,31 +27,14 @@ conditional is written as ? variable statement, the statement is executed only i
 negative conditional, written as ! variable statement, executes the statement only if the variable is false.
 Note that all whitespace (newlines, spaces, tabs) is ignored and serves only for separating the variable names. The program input is terminated by EOF.
 
-Output program
+## Output program
 The output programming language is a simple list of instructions for a stack-based machine that may resemble assembly, FORTH, or a simple postfix calculator.
 
 During the computation, it maintains a stack (last-in-first-out-style queue) of values. Results of the instructions are added to the top of the stack, parameters of individual instructions are removed from the top of the stack.
 
 Additionally, the machine has a variable lookup table that stores values of individual named variables.
 
-For example, using an instruction INT that pushes a single integer to a stack, ADD that pops 2 values out of the stack and pushes them added together, and WRITE that pops a value out of stack and prints it out to the user, we may write a program that lets the user observe that 5 is a result of computing 2+3:
-
-INT 2              //stack: [2]
-INT 3              //stack: [2,3]
-ADD                //stack: [5]
-WRITE              //writes out the 5, stack is empty
-QUIT               //terminates.
-(The comments behind // are not a part of the program.)
-
-The variable "memory" is controlled using LOADVAR and STOREVAR instructions. For example, a variable i stored in the lookup table may be incremented as such:
-
-LOADVAR i           //stack is e.g. [5]
-INT 1               //stack is [5,1]
-ADD                 //stack is [6]
-STOREVAR i          //i=6 is stored, stack is empty
-All programs must terminate with instruction QUIT, so that it's clear they really terminate.
-
-The supported instructions are as such:
+### The supported instructions are as such:
 
 INT xxx pushes a single integer constant to a stack, e.g. INT 1 pushes 1.
 LOADVAR xxx finds a variable named xxx in the variable memory and pushes its value to the stack.
